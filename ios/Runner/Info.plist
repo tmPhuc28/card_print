@@ -33,7 +33,13 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortrait</string> <!-- Chỉ cho phép chế độ dọc -->
+        <string>UIInterfaceOrientationPortraitUpsideDown</string> <!-- Chế độ ngược dọc -->
 	</array>
+	<key>LSApplicationQueriesSchemes</key> // Đã thêm dòng này để tự mở ứng dụng cuộc gọi
+        <array>
+            <string>tel</string>
+        </array> // End ... cuộc gọi
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
