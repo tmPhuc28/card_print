@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
 
+  flutter_blue_plus: ^1.33.6
   bluetooth_print: ^4.3.0
   image: ^4.0.15
   path_provider: ^2.0.15

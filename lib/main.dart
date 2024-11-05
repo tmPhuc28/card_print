@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'widgets/snackBarCustom.dart';
+import 'widgets/roundedCheckbox.dart';
 import 'dart:ui' as ui;
 
 void main() {
@@ -56,18 +57,18 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
   List<BluetoothDevice> _devices = [];
   BluetoothDevice? _selectedDevice;
   String _deviceMsg = "";
-  bool _isConnected = false;
-  bool _isSearching = false;
-  int backButtonPressCount = 0;
-  final int backButtonThreshold = 2;
-  final TextEditingController _textContent = TextEditingController();
-  DateTime? _lastBackPress;
-  bool _showExitWarning = false;
-  bool _printWithQR = false;
-  Timer? _searchTimer;
-  Timer? _exitWarningTimer;
   String _selectedProvider = 'Viettel';
   String _selectedDenomination = '20.000 VND';
+  bool _isConnected = false;
+  bool _isSearching = false;
+  bool _showExitWarning = false;
+  bool _printWithQR = false;
+  int backButtonPressCount = 0;
+  DateTime? _lastBackPress;
+  Timer? _searchTimer;
+  Timer? _exitWarningTimer;
+  final int backButtonThreshold = 2;
+  final TextEditingController _textContent = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   final Map<String, List<String>> _providerDenominations = {
     'Viettel': [
@@ -152,6 +153,66 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _connectBluetooth() async {
+    if (_selectedDevice == null) {
+      setState(() {
+        _deviceMsg = 'Hãy chọn máy in để kết nối';
+      });
+      if (!mounted) return;
+      showTopSnackBar(context, 'Chưa chọn thiết bị');
+      return;
+    }
+
+    try {
+      setState(() {
+        _deviceMsg = 'Đang kết nối...';
+      });
+
+      await bluetoothPrint.connect(_selectedDevice!);
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      setState(() {
+        _isConnected = true;
+        ConnectedDeviceManager.setConnectedDevice(_selectedDevice);
+        _updateStatus();
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+        showTopSnackBar(context, 'Đã kết nối với: ${_selectedDevice!.name}');
+      });
+    } catch (e) {
+      setState(() {
+        _isConnected = false;
+        if (kDebugMode) {
+          print("Lỗi kết nối: $e");
+        }
+      });
+      if (!mounted) return;
+      showTopSnackBar(context, 'Lỗi kết nối !');
+    }
+  }
+
+  Future<void> _disconnectBluetooth() async {
+    try {
+      await bluetoothPrint.disconnect();
+
+      setState(() {
+        _isConnected = false;
+        _selectedDevice = null;
+        ConnectedDeviceManager.clear();
+        _updateStatus();
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print("Lỗi khi ngắt kết nối: $e");
+      }
+      if (!mounted) return;
+      showTopSnackBar(context, 'Lỗi khi ngắt kết nối !');
+    }
+  }
+
   void _updateStatus() {
     if (!mounted) return;
     setState(() {
@@ -183,7 +244,7 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
           setState(() {
             _isSearching = false;
             _deviceMsg = _devices.isEmpty
-                ? 'Không tìm thấy thiết bị nào'
+                ? 'Không tìm thấy thiết bị'
                 : 'Tìm thấy ${_devices.length} thiết bị';
           });
         }
@@ -208,7 +269,8 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
     } catch (e) {
       setState(() {
         _isSearching = false;
-        showTopSnackBar(context, 'Lỗi khi tìm kiếm !');
+        _deviceMsg = "Hãy bật BLUETOOTH";
+        showTopSnackBar(context, 'BLUETOOTH chưa được bật');
         if (kDebugMode) {
           print("Lỗi khi tìm kiếm: $e");
         }
@@ -240,7 +302,7 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
 
     switch (provider.toLowerCase()) {
       case 'viettel':
-      // Format: xxx xxxx xxxx x (13 số)
+        // Format: xxx xxxx xxxx x (13 số)
         if (number.length == 13) {
           return '${number.substring(0, 3)} ${number.substring(3, 7)} ${number.substring(7, 11)} ${number.substring(11)}';
         }
@@ -250,13 +312,13 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
         }
         break;
       case 'vinaphone':
-      // Format: xxxx xxxx xxxx xx (14 số)
+        // Format: xxxx xxxx xxxx xx (14 số)
         if (number.length == 14) {
           return '${number.substring(0, 4)} ${number.substring(4, 8)} ${number.substring(8, 12)} ${number.substring(12)}';
         }
         break;
       case 'mobifone':
-      // Format: xxxx xxxx xxxx (12 số)
+        // Format: xxxx xxxx xxxx (12 số)
         if (number.length == 12) {
           return '${number.substring(0, 4)} ${number.substring(4, 8)} ${number.substring(8)}';
         }
@@ -298,21 +360,20 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
           line.toLowerCase().contains('mã thẻ:') ||
           line.toLowerCase().contains('ma nap:') ||
           line.toLowerCase().contains('ma the:') ||
-          line.toLowerCase().contains('mathe:')  ||
-          line.toLowerCase().contains('manap:')  ||
+          line.toLowerCase().contains('mathe:') ||
+          line.toLowerCase().contains('manap:') ||
           line.toLowerCase().contains('mã nap:') ||
           line.toLowerCase().contains('ma nạp:') ||
           line.toLowerCase().contains('mã the:') ||
-          line.toLowerCase().contains('ma thẻ:'))
-      {
+          line.toLowerCase().contains('ma thẻ:')) {
         result['rechargeCode'] = line.split(':')[1].trim();
       }
       // Tìm số seri
-      if (line.toLowerCase().contains('số seri:')   ||
+      if (line.toLowerCase().contains('số seri:') ||
           line.toLowerCase().contains('số serial:') ||
-          line.toLowerCase().contains('so seri:')   ||
+          line.toLowerCase().contains('so seri:') ||
           line.toLowerCase().contains('so serial:') ||
-          line.toLowerCase().contains('soseri:')    ||
+          line.toLowerCase().contains('soseri:') ||
           line.toLowerCase().contains('soserial:')) {
         result['serialNumber'] = line.split(':')[1].trim();
       }
@@ -422,7 +483,8 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
     }
 
     // Vẽ nền trắng cho ảnh
-    canvas.drawRect(const Rect.fromLTWH(0, 0, 400, 600), paint); // Tăng chiều cao để chứa QR
+    canvas.drawRect(const Rect.fromLTWH(0, 0, 400, 600),
+        paint); // Tăng chiều cao để chứa QR
 
     // Create text painters
     final storeNamePainter = _createTextPainter(
@@ -514,9 +576,7 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
     // Service information with left-right alignment
     void drawLabelValue(TextPainter label, TextPainter value, double y) {
       label.paint(canvas, Offset(10, y));
-      value.paint(
-          canvas,
-          Offset(400 - value.width - 10, y));
+      value.paint(canvas, Offset(400 - value.width - 10, y));
     }
 
     // Draw text elements
@@ -570,8 +630,6 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
     }
     //End vẽ QR code
 
-
-
     // Draw separator line before footer
     drawSeparatorLine(canvas, offsetY);
     offsetY += 10;
@@ -586,7 +644,6 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
     return byteData!.buffer.asUint8List();
   }
 
-
   TextPainter _createTextPainter(String text, double fontSize, FontWeight fontWeight, TextAlign textAlign, double maxWidth) {
     final textSpan = TextSpan(
       text: text,
@@ -596,7 +653,6 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
         fontWeight: fontWeight,
       ),
     );
-
     return TextPainter(
       text: textSpan,
       textDirection: TextDirection.ltr,
@@ -606,11 +662,11 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
   }
 
   Future<void> _showPreview() async {
+
     if (_textContent.text.isEmpty) {
       showTopSnackBar(context, 'Hãy nhập mã nạp và số serial');
       return;
     }
-
     final previewImage = await _createImageFromText(_textContent.text);
 
     setState(() {
@@ -618,7 +674,6 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
     });
 
     if (!mounted) return;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -653,9 +708,9 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                     Text(
                       'Xem trước',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
                     ),
                   ],
                 ),
@@ -673,24 +728,25 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                     padding: const EdgeInsets.all(16),
                     child: _previewImage != null
                         ? ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: InteractiveViewer(
-                        transformationController: transformationController,
-                        minScale: 0.5,
-                        maxScale: 4.0,
-                        child: Image.memory(
-                          _previewImage!,
-                          fit: BoxFit.contain,
-                          width: double.infinity,
-                        ),
-                      ),
-                    )
+                            borderRadius: BorderRadius.circular(12),
+                            child: InteractiveViewer(
+                              transformationController:
+                                  transformationController,
+                              minScale: 0.5,
+                              maxScale: 4.0,
+                              child: Image.memory(
+                                _previewImage!,
+                                fit: BoxFit.contain,
+                                width: double.infinity,
+                              ),
+                            ),
+                          )
                         : Center(
-                      child: Text(
-                        'Không có dữ liệu xem trước',
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ),
+                            child: Text(
+                              'Không có dữ liệu xem trước',
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -725,9 +781,14 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                       child: ElevatedButton.icon(
                         icon: const Icon(Icons.print),
                         label: const Text('In thẻ'),
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _printImage();
+                        onPressed: () async {
+                          if (_isConnected) {
+                            if(!mounted) return;
+                            Navigator.of(context).pop();
+                            await _printImage();
+                          } else {
+                            _showBluetoothPopup();
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
@@ -755,11 +816,6 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
       return;
     }
 
-    if (!_isConnected) {
-      _showBluetoothPopup();
-      return;
-    }
-
     try {
       final imageData = await _createImageFromText(_textContent.text);
 
@@ -783,66 +839,6 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
       if (kDebugMode) {
         print("Lỗi khi in: $e");
       }
-    }
-  }
-
-  Future<void> _connectBluetooth() async {
-    if (_selectedDevice == null) {
-      setState(() {
-        _deviceMsg = 'Hãy chọn máy in để kết nối';
-      });
-      if (!mounted) return;
-      showTopSnackBar(context, 'Chưa chọn thiết bị');
-      return;
-    }
-
-    try {
-      setState(() {
-        _deviceMsg = 'Đang kết nối...';
-      });
-
-      await bluetoothPrint.connect(_selectedDevice!);
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      setState(() {
-        _isConnected = true;
-        ConnectedDeviceManager.setConnectedDevice(_selectedDevice);
-        _updateStatus();
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            Navigator.of(context).pop();
-          }
-        });
-        showTopSnackBar(context, 'Đã kết nối với: ${_selectedDevice!.name}');
-      });
-    } catch (e) {
-      setState(() {
-        _isConnected = false;
-        if (kDebugMode) {
-          print("Lỗi kết nối: $e");
-        }
-      });
-      if (!mounted) return;
-      showTopSnackBar(context, 'Lỗi kết nối !');
-    }
-  }
-
-  Future<void> _disconnectBluetooth() async {
-    try {
-      await bluetoothPrint.disconnect();
-
-      setState(() {
-        _isConnected = false;
-        _selectedDevice = null;
-        ConnectedDeviceManager.clear();
-        _updateStatus();
-      });
-    } catch (e) {
-      if (kDebugMode) {
-        print("Lỗi khi ngắt kết nối: $e");
-      }
-      if (!mounted) return;
-      showTopSnackBar(context, 'Lỗi khi ngắt kết nối !');
     }
   }
 
@@ -921,14 +917,14 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
         onPressed: _isSearching
             ? null
             : () async {
-          setDialogState(() {
-            if (_isConnected) {
-              _disconnectBluetooth();
-            } else {
-              _connectBluetooth();
-            }
-          });
-        },
+                setDialogState(() {
+                  if (_isConnected) {
+                    _disconnectBluetooth();
+                  } else {
+                    _connectBluetooth();
+                  }
+                });
+              },
         style: ElevatedButton.styleFrom(
           backgroundColor: _isConnected ? Colors.red : Colors.blue,
           foregroundColor: Colors.white,
@@ -957,7 +953,10 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
         ),
         IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+          color: Colors.red,
+          onPressed:_isSearching
+              ? null
+              : () => Navigator.pop(context),
           style: IconButton.styleFrom(
             backgroundColor: Colors.grey.shade100,
             shape: RoundedRectangleBorder(
@@ -998,6 +997,8 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                     color: Colors.grey.shade700,
                     fontSize: 12,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -1021,7 +1022,7 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
               borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(8)),
+                  const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: Row(
               children: [
@@ -1044,9 +1045,9 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                   onPressed: _isSearching
                       ? null
                       : () async {
-                    setDialogState(() => _isSearching = true);
-                    await _searchDevices();
-                  },
+                          setDialogState(() => _isSearching = true);
+                          await _searchDevices();
+                        },
                 ),
               ],
             ),
@@ -1056,83 +1057,83 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
           Expanded(
             child: _devices.isEmpty
                 ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  _isSearching
-                      ? 'Đang tìm kiếm thiết bị...'
-                      : 'Không tìm thấy thiết bị nào',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ),
-            )
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        _isSearching
+                            ? 'Đang tìm...'
+                            : 'Không có thiết bị',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ),
+                  )
                 : ListView.separated(
-              itemCount: _devices.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final device = _devices[index];
-                final isSelected = _selectedDevice == device;
-                final isConnected = _isConnected &&
-                    ConnectedDeviceManager.getConnectedDevice() == device;
+                    itemCount: _devices.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final device = _devices[index];
+                      final isSelected = _selectedDevice == device;
+                      final isConnected = _isConnected &&
+                          ConnectedDeviceManager.getConnectedDevice() == device;
 
-                return ListTile(
-                  dense: true,
-                  selected: isSelected,
-                  selectedTileColor: Colors.blue.shade50,
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isConnected
-                          ? Colors.green.shade100
-                          : isSelected
-                          ? Colors.blue.shade100
-                          : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.print,
-                      color: isConnected
-                          ? Colors.green
-                          : isSelected
-                          ? Colors.blue
-                          : Colors.grey,
-                      size: 20,
-                    ),
+                      return ListTile(
+                        dense: true,
+                        selected: isSelected,
+                        selectedTileColor: Colors.blue.shade50,
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isConnected
+                                ? Colors.green.shade100
+                                : isSelected
+                                    ? Colors.blue.shade100
+                                    : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.print,
+                            color: isConnected
+                                ? Colors.green
+                                : isSelected
+                                    ? Colors.blue
+                                    : Colors.grey,
+                            size: 20,
+                          ),
+                        ),
+                        title: Text(
+                          device.name ?? 'Không xác định',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: isConnected ? Colors.green : null,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          device.address ?? '...',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: isConnected
+                            ? const Icon(Icons.check_circle,
+                                color: Colors.green)
+                            : isSelected
+                                ? const Icon(Icons.check_circle,
+                                    color: Colors.blue)
+                                : null,
+                        onTap: () {
+                          setDialogState(() {
+                            _selectedDevice = device;
+                            _deviceMsg = 'Đã chọn: ${device.name}';
+                          });
+                        },
+                      );
+                    },
                   ),
-                  title: Text(
-                    device.name ?? 'Không xác định',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      color: isConnected ? Colors.green : null,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    device.address ?? '...',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: isConnected
-                      ? const Icon(Icons.check_circle,
-                      color: Colors.green)
-                      : isSelected
-                      ? const Icon(Icons.check_circle,
-                      color: Colors.blue)
-                      : null,
-                  onTap: () {
-                    setDialogState(() {
-                      _selectedDevice = device;
-                      _deviceMsg = 'Đã chọn: ${device.name}';
-                    });
-                  },
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -1140,7 +1141,6 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
   }
 
   void _showBluetoothPopup() {
-
     showDialog(
       context: context,
       barrierDismissible: false, // Ngăn đóng popup khi click bên ngoài
@@ -1241,16 +1241,7 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
             elevation: 0,
             title: const FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(
-                'IN THẺ',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Icon(Icons.print, size: 40, color: Colors.black,),
             ),
             centerTitle: true,
             bottom: PreferredSize(
@@ -1261,11 +1252,11 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
               ),
             ),
           ),
-          backgroundColor: Colors.grey[100],
+          backgroundColor: Colors.grey[300],
           // Wrap body with ResizeToAvoidBottomInset
           resizeToAvoidBottomInset: true,
           body: GestureDetector(
-            onTap: (){
+            onTap: () {
               FocusScope.of(context).unfocus();
             },
             child: SafeArea(
@@ -1290,7 +1281,8 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.bluetooth, color: Colors.blue),
+                                  const Icon(Icons.bluetooth,
+                                      color: Colors.blue),
                                   const SizedBox(width: 8),
                                   const Text(
                                     'Kết nối máy in',
@@ -1361,11 +1353,33 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                      child: Column(
+                                    children: [
+                                      RoundedCheckbox(
+                                        value: _printWithQR,
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _printWithQR = value;
+                                          });
+                                        },
+                                        title: 'In kèm mã QR',
+                                        icon: Icons.qr_code,
+                                      ),
+                                      const SizedBox(height: 20),
+                                    ],
+                                  ))
+                                ],
+                              ),
+                              Row(
                                 children: [
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           'Nhà mạng',
@@ -1384,8 +1398,7 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                                             border: Border.all(
                                                 color: Colors.grey.shade300),
                                             borderRadius:
-                                            BorderRadius.circular(8),
-
+                                                BorderRadius.circular(8),
                                           ),
                                           child: DropdownButton<String>(
                                             value: _selectedProvider,
@@ -1406,12 +1419,14 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                                               setState(() {
                                                 _selectedProvider = newValue!;
                                                 _selectedDenomination =
-                                                _providerDenominations[
-                                                _selectedProvider]![0];
+                                                    _providerDenominations[
+                                                        _selectedProvider]![0];
                                               });
                                             },
                                             dropdownColor: Colors.white,
-                                            borderRadius: const BorderRadius.all(Radius.circular(10)),
+                                            borderRadius:
+                                                const BorderRadius.all(
+                                                    Radius.circular(10)),
                                           ),
                                         ),
                                       ],
@@ -1421,7 +1436,7 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           'Mệnh giá',
@@ -1440,49 +1455,41 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                                             border: Border.all(
                                                 color: Colors.grey.shade300),
                                             borderRadius:
-                                            BorderRadius.circular(8),
+                                                BorderRadius.circular(8),
                                           ),
                                           child: DropdownButton<String>(
                                             value: _selectedDenomination,
                                             isExpanded: true,
                                             underline: Container(),
                                             items: _providerDenominations[
-                                            _selectedProvider]!
+                                                    _selectedProvider]!
                                                 .map((String denomination) {
                                               return DropdownMenuItem<String>(
                                                 value: denomination,
                                                 child: Text(
                                                   denomination,
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               );
                                             }).toList(),
                                             onChanged: (newValue) {
                                               setState(() {
-                                                _selectedDenomination = newValue!;
+                                                _selectedDenomination =
+                                                    newValue!;
                                               });
-
                                             },
                                             dropdownColor: Colors.white,
-                                            borderRadius: const BorderRadius.all(Radius.circular(10)),
+                                            borderRadius:
+                                                const BorderRadius.all(
+                                                    Radius.circular(10)),
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 20),
-                              CheckboxListTile(
-                                value: _printWithQR,
-                                title: const Text('In kèm mã QR'),
-                                secondary: const Icon(Icons.qr_code),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _printWithQR = value ?? false;
-                                  });
-                                },
                               ),
                               const SizedBox(height: 20),
                               const Text(
@@ -1504,17 +1511,17 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide:
-                                    BorderSide(color: Colors.grey.shade300),
+                                        BorderSide(color: Colors.grey.shade300),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide:
-                                    BorderSide(color: Colors.grey.shade300),
+                                        BorderSide(color: Colors.grey.shade300),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide:
-                                    const BorderSide(color: Colors.blue),
+                                        const BorderSide(color: Colors.blue),
                                   ),
                                 ),
                                 minLines: 1,
@@ -1540,7 +1547,8 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                                         padding: const EdgeInsets.symmetric(
                                             vertical: 12),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                         side: const BorderSide(
                                           color: Colors.green,
@@ -1560,7 +1568,8 @@ class _PrinterPageState extends State<PrinterPage> with WidgetsBindingObserver {
                                         padding: const EdgeInsets.symmetric(
                                             vertical: 12),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                       ),
                                     ),
